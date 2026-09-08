@@ -43,6 +43,11 @@ struct PDFViewerScreen: View {
         .navigationTitle(item?.displayName ?? "Document")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: loadIfNeeded)
+        .onChange(of: itemID) { _, _ in
+            didLoad = false
+            markup = .empty
+            loadIfNeeded()
+        }
         .onDisappear(perform: persist)
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {

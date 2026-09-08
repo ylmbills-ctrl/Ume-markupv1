@@ -20,6 +20,7 @@ struct LibraryView: View {
         } detail: {
             if let selectedID, let item = library.item(id: selectedID) {
                 PDFViewerScreen(itemID: item.id)
+                    .id(item.id)
             } else {
                 ContentUnavailableView(
                     "Select a Document",
