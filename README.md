@@ -1,6 +1,6 @@
 # UME Markupv1
 
-PDF viewer and annotator for iPhone and iPad. Import a document, mark it up with a **freehand Pencil highlighter**, underline, Apple Pencil ink, or a page-anchored note, bookmark pages, then leave and reopen with those marks still there. v1 stores the library on **this device** (Application Support). Multi-device iCloud sync is optional and requires a paid Apple Developer Program team later.
+PDF viewer and annotator for iPhone and iPad. Import a document, mark it up with a **freehand Pencil highlighter**, underline, Apple Pencil ink, or a page-anchored note, bookmark pages, then leave and reopen with those marks still there. **Share** exports a flattened copy (`OriginalName-marked.pdf`) that Files, Mail, GoodNotes, and other PDF apps can open — the library original stays editable. v1 stores the library on **this device** (Application Support). Multi-device iCloud sync is optional and requires a paid Apple Developer Program team later.
 
 This repository is an Xcode-ready thin v1. It was authored on Linux, so **open and run it on a Mac**. There is no App Store or TestFlight submission in this project.
 
@@ -68,8 +68,10 @@ This environment cannot compile or launch an iOS app. On a Mac, walk through:
 4. Simulator / no Pencil: the pointer is treated as Pencil so you can still draw. Finger-vs-Pencil palm rejection can only be proven on a real iPad.
 5. Import a real PDF via **Import PDF…** (Files / document picker).
 6. On a device, share a PDF into **UME Markupv1** (the app registers as a PDF editor). It is copied into the library.
-7. Delete a document with swipe-to-delete. It should disappear from the list.
-8. Confirm the library header says **Saved on this device only**. Leave and reopen: markup is still there (no iCloud required).
+7. **Share / Export** — from the open document, tap the share button in the navigation bar. Save to Files or send to another PDF app. The shared file is named `OriginalName-marked.pdf` and should show ink, freehand highlight, underline, and notes. Reopen the same item in this app: live markup is still editable. The imported `document.pdf` is unchanged.
+8. From the library list, swipe leading or use the context menu **Share Marked PDF**. Same flattened copy.
+9. Delete a document with swipe-to-delete. It should disappear from the list.
+10. Confirm the library header says **Saved on this device only**. Leave and reopen: markup is still there (no iCloud required).
 
 ## Architecture
 
@@ -79,7 +81,8 @@ Library (SwiftUI)
 Viewer (SwiftUI + PDFKit)
     ├── PDFView renders pages (auto-scale, continuous scroll)
     ├── PDFAnnotation draws underline / sticky note (and older selection highlights)
-    └── PKCanvasView overlays (PDFPageOverlayViewProvider) draw ink + freehand highlight
+    ├── PKCanvasView overlays (PDFPageOverlayViewProvider) draw ink + freehand highlight
+    └── Share exports a flattened copy (annotations + PencilKit strokes) via the system share sheet
 Storage
     └── one folder per document on this device (Application Support)
 ```
@@ -109,6 +112,8 @@ If a paid team later enables iCloud Documents, the same layout can live under:
 
 The original PDF is not rewritten. Underline and notes (and any older selection-based highlights) are re-applied as `PDFAnnotation`s when the file opens. Ink and freehand highlight are per-page `PKDrawing`s stored as Base64 in `markup.json` (`inkPages` / `highlightPages`). Bookmarks are 0-based page indices in the same sidecar (`bookmarkedPages`). Saves are atomic (temp file, then replace). Older `markup.json` files without the new keys still load.
 
+**Share / Export** writes a *new* PDF to a temporary folder (`OriginalName-marked.pdf`). It does not replace `document.pdf`. Other apps receive the copy; this library keeps the live, editable sidecar.
+
 ### Sync behavior
 
 - **v1 default (Personal Team):** no iCloud entitlement. Library stays on that device.
@@ -135,6 +140,27 @@ On a real iPad, **Ink, Highlight, and Eraser accept Apple Pencil only** (`PKCanv
 
 Leave the document and reopen it: highlights, underlines, notes, ink, and bookmarks persist in `markup.json` on this device. No paid Apple Developer Program membership is required for v1.
 
+### Share and Export
+
+Other PDF apps cannot read `markup.json`. **Share** builds a flattened copy that they can.
+
+1. Open a marked-up document (or pick one in the library).
+2. Tap **Share** in the viewer navigation bar (or swipe / long-press **Share Marked PDF** on a library row).
+3. The app flushes live PencilKit strokes, then writes `OriginalName-marked.pdf`.
+4. The iOS share sheet opens: **Save to Files**, Mail, GoodNotes, Preview, AirDrop, and so on.
+
+What is baked into the copy:
+
+| Mark | How it is included |
+| --- | --- |
+| Freehand ink (`inkPages`) | PencilKit strokes drawn onto each page |
+| Freehand highlight (`highlightPages`) | Marker strokes drawn onto each page |
+| Underline / note / older selection highlight | Existing `PDFAnnotation`s replayed with the page |
+
+The library item stays as it was: `document.pdf` is untouched, and you can keep editing ink and highlights in this app.
+
+Share works offline on a Personal Team. It does not use iCloud.
+
 ## Troubleshooting Pencil
 
 On a real iPad you **must select Ink, Highlight, or Eraser** in the bottom toolbar before the Pencil will write. The Scroll tool never inks. The toolbar caption should read `Ink · Pencil` or `Highlight · Pencil`.
@@ -146,6 +172,7 @@ On a real iPad you **must select Ink, Highlight, or Eraser** in the bottom toolb
 | Page will not scroll while Ink is selected | Use a finger (or the heel of your hand), not the Pencil. Pencil is reserved for marks. Or switch back to **Scroll**. |
 | Underline still works, Ink does not | Underline is a separate drag gesture. If only Ink/Highlight fail, the overlay hit path is the suspect — not PDFKit annotations. |
 | Marks vanish after reopen | They live in `markup.json` next to the PDF on this device (not iCloud). The library header should say **Saved on this device only**. |
+| Shared PDF has no ink / highlight | Share flushes the live canvas first. Draw, wait a moment, tap Share again. Other apps only see marks after **Share** — the library `document.pdf` stays clean on purpose. |
 
 Personal Team signing stays entitlement-free. Do not add an iCloud capability to “fix” Pencil.
 
@@ -158,9 +185,9 @@ UMEMarkupv1/
   Info.plist                    # PDF document type
   UMEMarkupv1.entitlements      # empty — no iCloud (Personal Team signs)
   Models/                       # library item, markup JSON, tools
-  Services/                     # storage root, library, JSON persistence
+  Services/                     # storage root, library, JSON persistence, flattened PDF export
   PDF/                          # PDFKit host, PencilKit overlays, sample PDF
-  Views/                        # library, viewer, toolbar, note sheet
+  Views/                        # library, viewer, toolbar, note sheet, share sheet
   Assets.xcassets/
 ```
 
@@ -169,7 +196,7 @@ UMEMarkupv1/
 Out of scope, on purpose:
 
 - OCR and full-text search inside PDFs (filename search only)
-- Folders, tags, collaboration, export-as-new-PDF workflows
+- Folders, tags, collaboration
 - Subscriptions, branding, or extra sample content
 - App Store / TestFlight upload
 - Password-protected PDFs
@@ -179,7 +206,7 @@ Out of scope, on purpose:
 
 Known thin-v1 behavior:
 
-- Ink and freehand highlight live in a sidecar, not inside the PDF, so Preview / other apps will not show those strokes. Underlines, notes, and older selection highlights are also sidecar-backed (recreated on open) rather than baked into `document.pdf`.
+- Ink and freehand highlight live in a sidecar, not inside the library `document.pdf`. Use **Share** to send a flattened copy that other apps can display. Underlines, notes, and older selection highlights are also sidecar-backed until you export.
 - Highlight is a PencilKit marker stroke. It does not use PDF text selection, so it works the same on scanned image pages.
 - On device, Ink / Highlight / Eraser ignore finger input. Use Apple Pencil to mark; use a finger to scroll. Simulator uses `.anyInput` so a mouse can still draw.
 - Simulator cannot prove Pencil palm rejection. iCloud multi-device sync is out of scope until a paid team adds the capability.

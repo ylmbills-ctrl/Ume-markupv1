@@ -14,12 +14,14 @@
 		A10000000000000000000154 /* Services/StorageRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000054 /* StorageRoot.swift */; };
 		A10000000000000000000155 /* Services/DocumentLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000055 /* DocumentLibrary.swift */; };
 		A10000000000000000000156 /* Services/MarkupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000056 /* MarkupStore.swift */; };
+		A1000000000000000000015D /* Services/MarkupPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005D /* MarkupPDFExporter.swift */; };
 		A10000000000000000000157 /* PDF/WelcomePDFFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000057 /* WelcomePDFFactory.swift */; };
 		A10000000000000000000158 /* PDF/PDFMarkupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000058 /* PDFMarkupView.swift */; };
 		A10000000000000000000159 /* Views/LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000059 /* LibraryView.swift */; };
 		A1000000000000000000015A /* Views/PDFViewerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005A /* PDFViewerScreen.swift */; };
 		A1000000000000000000015B /* Views/MarkupToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005B /* MarkupToolbar.swift */; };
 		A1000000000000000000015C /* Views/NoteEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005C /* NoteEditorView.swift */; };
+		A1000000000000000000015E /* Views/ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005E /* ShareSheet.swift */; };
 		A10000000000000000000042 /* PDFKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000040 /* PDFKit.framework */; };
 		A10000000000000000000043 /* PencilKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000041 /* PencilKit.framework */; };
 		A10000000000000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* Assets.xcassets */; };
@@ -33,12 +35,14 @@
 		A10000000000000000000054 /* StorageRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageRoot.swift; sourceTree = "<group>"; };
 		A10000000000000000000055 /* DocumentLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentLibrary.swift; sourceTree = "<group>"; };
 		A10000000000000000000056 /* MarkupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkupStore.swift; sourceTree = "<group>"; };
+		A1000000000000000000005D /* MarkupPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkupPDFExporter.swift; sourceTree = "<group>"; };
 		A10000000000000000000057 /* WelcomePDFFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomePDFFactory.swift; sourceTree = "<group>"; };
 		A10000000000000000000058 /* PDFMarkupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFMarkupView.swift; sourceTree = "<group>"; };
 		A10000000000000000000059 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		A1000000000000000000005A /* PDFViewerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewerScreen.swift; sourceTree = "<group>"; };
 		A1000000000000000000005B /* MarkupToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkupToolbar.swift; sourceTree = "<group>"; };
 		A1000000000000000000005C /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
+		A1000000000000000000005E /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 		A10000000000000000000010 /* UME Markupv1.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "UME Markupv1.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A10000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -107,6 +111,7 @@
 				A10000000000000000000054 /* StorageRoot.swift */,
 				A10000000000000000000055 /* DocumentLibrary.swift */,
 				A10000000000000000000056 /* MarkupStore.swift */,
+				A1000000000000000000005D /* MarkupPDFExporter.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -127,6 +132,7 @@
 				A1000000000000000000005A /* PDFViewerScreen.swift */,
 				A1000000000000000000005B /* MarkupToolbar.swift */,
 				A1000000000000000000005C /* NoteEditorView.swift */,
+				A1000000000000000000005E /* ShareSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -207,12 +213,14 @@
 				A10000000000000000000154 /* Services/StorageRoot.swift in Sources */,
 				A10000000000000000000155 /* Services/DocumentLibrary.swift in Sources */,
 				A10000000000000000000156 /* Services/MarkupStore.swift in Sources */,
+				A1000000000000000000015D /* Services/MarkupPDFExporter.swift in Sources */,
 				A10000000000000000000157 /* PDF/WelcomePDFFactory.swift in Sources */,
 				A10000000000000000000158 /* PDF/PDFMarkupView.swift in Sources */,
 				A10000000000000000000159 /* Views/LibraryView.swift in Sources */,
 				A1000000000000000000015A /* Views/PDFViewerScreen.swift in Sources */,
 				A1000000000000000000015B /* Views/MarkupToolbar.swift in Sources */,
 				A1000000000000000000015C /* Views/NoteEditorView.swift in Sources */,
+				A1000000000000000000015E /* Views/ShareSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
