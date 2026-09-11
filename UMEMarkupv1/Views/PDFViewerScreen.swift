@@ -94,6 +94,10 @@ struct PDFViewerScreen: View {
                 tool: $tool,
                 color: $color,
                 pageLabel: "Page \(currentPage) of \(max(pageCount, 1))",
+                isCurrentPageBookmarked: markup.isPageBookmarked(currentPage - 1),
+                bookmarkedPageNumbers: markup.bookmarkedPages.map { $0 + 1 },
+                onToggleBookmark: toggleCurrentPageBookmark,
+                onJumpToBookmark: jumpToBookmarkedPage,
                 onUndo: undo
             )
         }
@@ -134,5 +138,15 @@ struct PDFViewerScreen: View {
 
     private func undo() {
         bridge.undo()
+    }
+
+    private func toggleCurrentPageBookmark() {
+        guard pageCount > 0, currentPage >= 1 else { return }
+        markup.toggleBookmark(pageIndex: currentPage - 1)
+        persist()
+    }
+
+    private func jumpToBookmarkedPage(_ pageNumber: Int) {
+        bridge.goToPage(pageNumber - 1)
     }
 }
