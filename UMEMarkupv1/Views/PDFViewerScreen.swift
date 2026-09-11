@@ -15,6 +15,8 @@ struct PDFViewerScreen: View {
     @State private var pendingNote: (pageIndex: Int, anchor: CGPoint)?
     @State private var didLoad = false
     @State private var bridge = MarkupBridge()
+    @State private var sharePayload: SharePayload?
+    @State private var isExporting = false
 
     private var item: LibraryItem? {
         library.item(id: itemID)
@@ -42,6 +44,24 @@ struct PDFViewerScreen: View {
         }
         .navigationTitle(item?.displayName ?? "Document")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    shareMarkedPDF()
+                } label: {
+                    if isExporting {
+                        ProgressView()
+                    } else {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                }
+                .disabled(item == nil || item?.isDownloading == true || isExporting)
+                .accessibilityLabel("Share marked PDF")
+            }
+        }
+        .sheet(item: $sharePayload) { payload in
+            ShareSheet(url: payload.url)
+        }
         .onAppear(perform: loadIfNeeded)
         .onChange(of: itemID) { _, _ in
             didLoad = false
@@ -148,5 +168,22 @@ struct PDFViewerScreen: View {
 
     private func jumpToBookmarkedPage(_ pageNumber: Int) {
         bridge.goToPage(pageNumber - 1)
+    }
+
+    private func shareMarkedPDF() {
+        guard let item, !isExporting else { return }
+        persist()
+        isExporting = true
+        do {
+            let url = try MarkupPDFExporter.export(
+                pdfURL: item.pdfURL,
+                markup: markup,
+                displayName: item.displayName
+            )
+            sharePayload = SharePayload(url: url)
+        } catch {
+            library.errorMessage = error.localizedDescription
+        }
+        isExporting = false
     }
 }

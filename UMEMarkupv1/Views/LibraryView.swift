@@ -6,6 +6,7 @@ struct LibraryView: View {
     @State private var selectedID: LibraryItem.ID?
     @State private var isImporterPresented = false
     @State private var itemPendingDelete: LibraryItem?
+    @State private var sharePayload: SharePayload?
 
     var body: some View {
         @Bindable var library = library
@@ -79,6 +80,9 @@ struct LibraryView: View {
                 itemPendingDelete = nil
             }
         }
+        .sheet(item: $sharePayload) { payload in
+            ShareSheet(url: payload.url)
+        }
         .navigationSplitViewStyle(.balanced)
         .onChange(of: library.lastImportedID) { _, id in
             if let id {
@@ -98,7 +102,21 @@ struct LibraryView: View {
                     ForEach(rows) { item in
                         LibraryRow(item: item)
                             .tag(item.id)
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                Button("Share", systemImage: "square.and.arrow.up") {
+                                    shareMarkedPDF(for: item)
+                                }
+                                .tint(.accentColor)
+                            }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button("Delete", systemImage: "trash", role: .destructive) {
+                                    itemPendingDelete = item
+                                }
+                            }
+                            .contextMenu {
+                                Button("Share Marked PDF", systemImage: "square.and.arrow.up") {
+                                    shareMarkedPDF(for: item)
+                                }
                                 Button("Delete", systemImage: "trash", role: .destructive) {
                                     itemPendingDelete = item
                                 }
@@ -150,6 +168,22 @@ struct LibraryView: View {
                 Label("Add", systemImage: "plus")
             }
             .accessibilityLabel("Add document")
+        }
+    }
+
+    private func shareMarkedPDF(for item: LibraryItem) {
+        guard !item.isDownloading else { return }
+        NotificationCenter.default.post(name: .umeSaveMarkupNow, object: nil)
+        let markup = MarkupStore.loadMarkup(at: item.markupURL)
+        do {
+            let url = try MarkupPDFExporter.export(
+                pdfURL: item.pdfURL,
+                markup: markup,
+                displayName: item.displayName
+            )
+            sharePayload = SharePayload(url: url)
+        } catch {
+            library.errorMessage = error.localizedDescription
         }
     }
 }
