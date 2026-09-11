@@ -3,9 +3,24 @@ import PencilKit
 import SwiftUI
 import UIKit
 
-/// Apple Pencil vs finger. On a real iPad, only Pencil draws. The Simulator
-/// treats the pointer as Pencil so Mac verification can still mark a page.
+/// Apple Pencil vs finger.
+///
+/// UIKit hit-testing often calls `hitTest` / `point(inside:)` with `event == nil`
+/// or an event whose `allTouches` is still empty. A filter that requires a live
+/// `.pencil` touch in `allTouches` therefore returns false for real Pencil
+/// strokes and the overlay never becomes the hit view. Classify those calls as
+/// `.unknown` and **allow** the canvas hit; `PKCanvasView.drawingPolicy` is what
+/// ignores finger drawing on device.
 enum PencilInput {
+    enum Role {
+        /// Known stylus (or the Simulator pointer, which we treat as a stylus).
+        case pencil
+        /// Known finger / palm — must not create marks.
+        case finger
+        /// Hit-test without a populated touch set. Do not reject these.
+        case unknown
+    }
+
     static var drawingPolicy: PKCanvasViewDrawingPolicy {
         #if targetEnvironment(simulator)
         .anyInput
@@ -14,17 +29,31 @@ enum PencilInput {
         #endif
     }
 
-    static var markupTouchTypes: [NSNumber] {
-        #if targetEnvironment(simulator)
+    static var allTouchTypes: [NSNumber] {
         [
             NSNumber(value: UITouch.TouchType.direct.rawValue),
             NSNumber(value: UITouch.TouchType.indirect.rawValue),
             NSNumber(value: UITouch.TouchType.pencil.rawValue),
             NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
         ]
+    }
+
+    /// Types that may begin a PencilKit stroke / eraser tap.
+    static var stylusTouchTypes: [NSNumber] {
+        #if targetEnvironment(simulator)
+        allTouchTypes
         #else
         [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
         #endif
+    }
+
+    /// Types that may pan the PDF while a drawing tool is selected.
+    static var fingerTouchTypes: [NSNumber] {
+        [
+            NSNumber(value: UITouch.TouchType.direct.rawValue),
+            NSNumber(value: UITouch.TouchType.indirect.rawValue),
+            NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
+        ]
     }
 
     static func accepts(_ touch: UITouch) -> Bool {
@@ -35,20 +64,17 @@ enum PencilInput {
         #endif
     }
 
-    static func isPencilEvent(_ event: UIEvent?, at point: CGPoint, in view: UIView) -> Bool {
+    static func role(of event: UIEvent?) -> Role {
         #if targetEnvironment(simulator)
-        return true
+        return .pencil
         #else
-        if event?.type == .hover { return true }
-        guard let touches = event?.allTouches, !touches.isEmpty else { return false }
-        let pencilTouches = touches.filter { $0.type == .pencil }
-        guard !pencilTouches.isEmpty else { return false }
-        return pencilTouches.contains { touch in
-            let location = touch.location(in: view)
-            let dx = location.x - point.x
-            let dy = location.y - point.y
-            return (dx * dx) + (dy * dy) < (48 * 48)
+        guard let event else { return .unknown }
+        if event.type == .hover { return .pencil }
+        guard let touches = event.allTouches, !touches.isEmpty else { return .unknown }
+        if touches.contains(where: { $0.type == .pencil }) {
+            return .pencil
         }
+        return .finger
         #endif
     }
 }
@@ -90,8 +116,11 @@ final class PageInkCanvas: PKCanvasView {
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         guard isUserInteractionEnabled, bounds.contains(point) else { return false }
-        // Finger / palm must fall through to PDFKit so the page can scroll.
-        guard PencilInput.isPencilEvent(event, at: point, in: self) else { return false }
+        // Only drop the hit when we *know* this is a finger. `event == nil`
+        // (or empty `allTouches`) is the normal Pencil hit-test path on device.
+        if PencilInput.role(of: event) == .finger {
+            return false
+        }
         return super.point(inside: point, with: event)
     }
 
@@ -109,38 +138,29 @@ final class MarkupPDFView: PDFView {
     var inkHitTestingEnabled = false
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        if inkHitTestingEnabled,
-           PencilInput.isPencilEvent(event, at: point, in: self),
-           let canvas = inkCanvas(containing: point),
-           canvas.isUserInteractionEnabled {
-            let local = convert(point, to: canvas)
-            if let hit = canvas.hitTest(local, with: event) {
-                return hit
-            }
-            if canvas.bounds.contains(local) {
-                return canvas
-            }
+        guard inkHitTestingEnabled,
+              let canvas = inkCanvas(containing: point),
+              canvas.isUserInteractionEnabled else {
+            return super.hitTest(point, with: event)
         }
 
-        let hit = super.hitTest(point, with: event)
-        // Finger landed on the ink overlay — give the document scroll view the touch.
-        if let hit, isInkOverlay(hit), let scroll = documentScrollView() {
-            let local = convert(point, to: scroll)
-            return scroll.hitTest(local, with: event) ?? scroll
+        // Known finger / palm: give the document scroll view the touch. Do not
+        // hit-test descendants — the overlay host would swallow the pan.
+        if PencilInput.role(of: event) == .finger {
+            return documentScrollView() ?? super.hitTest(point, with: event)
         }
-        return hit
-    }
 
-    private func isInkOverlay(_ view: UIView) -> Bool {
-        if view is PageInkCanvas { return true }
-        if view.subviews.contains(where: { $0 is PageInkCanvas }) { return true }
-        var current: UIView? = view
-        while let node = current {
-            if node is PageInkCanvas { return true }
-            current = node.superview
-            if current is PDFView || current is UIScrollView { break }
+        // Pencil, hover, Simulator, or unknown (nil / empty event): same path
+        // that worked in PR #2. PencilKit's drawingPolicy ignores non-stylus
+        // input if a later touch turns out not to be a Pencil.
+        let local = convert(point, to: canvas)
+        if let hit = canvas.hitTest(local, with: event) {
+            return hit
         }
-        return false
+        if canvas.bounds.contains(local) {
+            return canvas
+        }
+        return super.hitTest(point, with: event)
     }
 
     private func inkCanvas(containing point: CGPoint) -> PageInkCanvas? {
@@ -305,11 +325,7 @@ struct PDFMarkupView: UIViewRepresentable {
             tapRecognizer?.isEnabled = parent.tool.capturesPageTap
 
             if let host {
-                // Keep markup hit-testing on so Pencil reaches overlays after tool changes.
-                host.isInMarkupMode = true
-                host.inkHitTestingEnabled = parent.tool.enablesInkCanvas
-                host.documentScrollView()?.isScrollEnabled = !parent.tool.blocksDocumentScroll
-                enablePageViewInteraction(in: host)
+                applyHostInteractionPolicy(to: host)
             }
 
             for canvas in canvases.values {
@@ -356,7 +372,11 @@ struct PDFMarkupView: UIViewRepresentable {
             let key = ObjectIdentifier(page)
             if let existing = canvases[key] {
                 configure(existing)
-                enablePageViewInteraction(in: pdfView)
+                if let host = pdfView as? MarkupPDFView {
+                    applyHostInteractionPolicy(to: host)
+                } else {
+                    enablePageViewInteraction(in: pdfView)
+                }
                 return existing
             }
 
@@ -395,11 +415,10 @@ struct PDFMarkupView: UIViewRepresentable {
             if let canvas = overlayView as? PageInkCanvas {
                 configure(canvas)
             }
-            enablePageViewInteraction(in: view)
             if let host = view as? MarkupPDFView {
-                host.inkHitTestingEnabled = parent.tool.enablesInkCanvas
-                host.isInMarkupMode = true
-                host.documentScrollView()?.isScrollEnabled = !parent.tool.blocksDocumentScroll
+                applyHostInteractionPolicy(to: host)
+            } else {
+                enablePageViewInteraction(in: view)
             }
         }
 
@@ -538,7 +557,12 @@ struct PDFMarkupView: UIViewRepresentable {
         private func configure(_ canvas: PageInkCanvas) {
             let inkColor = UIColor(parent.color)
             canvas.drawingPolicy = PencilInput.drawingPolicy
+            canvas.drawingGestureRecognizer.allowedTouchTypes = PencilInput.stylusTouchTypes
             canvas.isUserInteractionEnabled = parent.tool.enablesInkCanvas
+            canvas.isScrollEnabled = false
+            canvas.delaysContentTouches = false
+            canvas.canCancelContentTouches = false
+            canvas.panGestureRecognizer.isEnabled = false
             canvas.activateOverlayAncestors()
             switch parent.tool {
             case .ink:
@@ -554,6 +578,31 @@ struct PDFMarkupView: UIViewRepresentable {
             default:
                 break
             }
+        }
+
+        /// PDFKit overlays only receive Pencil when markup mode stays on and the
+        /// private overlay host is interaction-enabled. Finger pans use the
+        /// document scroll view — do not disable it for Ink / Highlight / Eraser.
+        private func applyHostInteractionPolicy(to host: MarkupPDFView) {
+            host.isInMarkupMode = true
+            host.inkHitTestingEnabled = parent.tool.enablesInkCanvas
+            enablePageViewInteraction(in: host)
+
+            guard let scroll = host.documentScrollView() else { return }
+            if parent.tool.blocksDocumentScroll {
+                scroll.isScrollEnabled = false
+                return
+            }
+            scroll.isScrollEnabled = true
+            #if targetEnvironment(simulator)
+            scroll.panGestureRecognizer.allowedTouchTypes = PencilInput.allTouchTypes
+            #else
+            if parent.tool.enablesInkCanvas {
+                scroll.panGestureRecognizer.allowedTouchTypes = PencilInput.fingerTouchTypes
+            } else {
+                scroll.panGestureRecognizer.allowedTouchTypes = PencilInput.allTouchTypes
+            }
+            #endif
         }
 
         private func applyStoredDrawing(to canvas: PKCanvasView, pageIndex: Int) {

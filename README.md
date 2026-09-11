@@ -135,6 +135,20 @@ On a real iPad, **Ink, Highlight, and Eraser accept Apple Pencil only** (`PKCanv
 
 Leave the document and reopen it: highlights, underlines, notes, ink, and bookmarks persist in `markup.json` on this device. No paid Apple Developer Program membership is required for v1.
 
+## Troubleshooting Pencil
+
+On a real iPad you **must select Ink, Highlight, or Eraser** in the bottom toolbar before the Pencil will write. The Scroll tool never inks. The toolbar caption should read `Ink · Pencil` or `Highlight · Pencil`.
+
+| Symptom | What to check |
+| --- | --- |
+| Pencil does nothing in Ink or Highlight | Rebuild this version. An earlier build rejected overlay hits unless `event.allTouches` already contained a `.pencil` touch. During UIKit hit-testing that set is often empty (or `event` is nil), so the canvas never received the stroke. This build allows that unknown hit and uses `PKCanvasView.drawingPolicy = .pencilOnly` to ignore fingers. |
+| Finger leaves ink | Should not happen on a device. The Simulator treats the Mac pointer as Pencil and **will** draw. |
+| Page will not scroll while Ink is selected | Use a finger (or the heel of your hand), not the Pencil. Pencil is reserved for marks. Or switch back to **Scroll**. |
+| Underline still works, Ink does not | Underline is a separate drag gesture. If only Ink/Highlight fail, the overlay hit path is the suspect — not PDFKit annotations. |
+| Marks vanish after reopen | They live in `markup.json` next to the PDF on this device (not iCloud). The library header should say **Saved on this device only**. |
+
+Personal Team signing stays entitlement-free. Do not add an iCloud capability to “fix” Pencil.
+
 ## Project layout
 
 ```
