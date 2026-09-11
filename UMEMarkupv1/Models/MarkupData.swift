@@ -77,23 +77,108 @@ struct MarkupDocument: Codable, Hashable {
     var version: Int
     var annotations: [MarkupRecord]
     var inkPages: [InkPage]
+    /// Freehand highlighter strokes (`PKInkingTool.marker`), stored apart from pen ink.
+    var highlightPages: [InkPage]
+    /// 0-based PDF page indices the reader bookmarked.
+    var bookmarkedPages: [Int]
 
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     static var empty: MarkupDocument {
-        MarkupDocument(version: currentVersion, annotations: [], inkPages: [])
+        MarkupDocument(
+            version: currentVersion,
+            annotations: [],
+            inkPages: [],
+            highlightPages: [],
+            bookmarkedPages: []
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case annotations
+        case inkPages
+        case highlightPages
+        case bookmarkedPages
+    }
+
+    init(
+        version: Int,
+        annotations: [MarkupRecord],
+        inkPages: [InkPage],
+        highlightPages: [InkPage] = [],
+        bookmarkedPages: [Int] = []
+    ) {
+        self.version = version
+        self.annotations = annotations
+        self.inkPages = inkPages
+        self.highlightPages = highlightPages
+        self.bookmarkedPages = bookmarkedPages
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        annotations = try container.decodeIfPresent([MarkupRecord].self, forKey: .annotations) ?? []
+        inkPages = try container.decodeIfPresent([InkPage].self, forKey: .inkPages) ?? []
+        highlightPages = try container.decodeIfPresent([InkPage].self, forKey: .highlightPages) ?? []
+        let rawBookmarks = try container.decodeIfPresent([Int].self, forKey: .bookmarkedPages) ?? []
+        bookmarkedPages = Self.normalizedBookmarks(rawBookmarks)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(annotations, forKey: .annotations)
+        try container.encode(inkPages, forKey: .inkPages)
+        try container.encode(highlightPages, forKey: .highlightPages)
+        try container.encode(Self.normalizedBookmarks(bookmarkedPages), forKey: .bookmarkedPages)
     }
 
     mutating func upsertInk(pageIndex: Int, drawingData: Data) {
-        inkPages.removeAll { $0.pageIndex == pageIndex }
-        if !drawingData.isEmpty {
-            inkPages.append(InkPage(pageIndex: pageIndex, drawingBase64: drawingData.base64EncodedString()))
-        }
+        upsert(pageIndex: pageIndex, drawingData: drawingData, into: &inkPages)
+    }
+
+    mutating func upsertHighlight(pageIndex: Int, drawingData: Data) {
+        upsert(pageIndex: pageIndex, drawingData: drawingData, into: &highlightPages)
     }
 
     func drawingData(for pageIndex: Int) -> Data? {
-        guard let page = inkPages.first(where: { $0.pageIndex == pageIndex }) else { return nil }
+        data(in: inkPages, pageIndex: pageIndex)
+    }
+
+    func highlightData(for pageIndex: Int) -> Data? {
+        data(in: highlightPages, pageIndex: pageIndex)
+    }
+
+    func isPageBookmarked(_ pageIndex: Int) -> Bool {
+        bookmarkedPages.contains(pageIndex)
+    }
+
+    mutating func toggleBookmark(pageIndex: Int) {
+        guard pageIndex >= 0 else { return }
+        if let existing = bookmarkedPages.firstIndex(of: pageIndex) {
+            bookmarkedPages.remove(at: existing)
+        } else {
+            bookmarkedPages.append(pageIndex)
+        }
+        bookmarkedPages = Self.normalizedBookmarks(bookmarkedPages)
+    }
+
+    private mutating func upsert(pageIndex: Int, drawingData: Data, into pages: inout [InkPage]) {
+        pages.removeAll { $0.pageIndex == pageIndex }
+        if !drawingData.isEmpty {
+            pages.append(InkPage(pageIndex: pageIndex, drawingBase64: drawingData.base64EncodedString()))
+        }
+    }
+
+    private func data(in pages: [InkPage], pageIndex: Int) -> Data? {
+        guard let page = pages.first(where: { $0.pageIndex == pageIndex }) else { return nil }
         return Data(base64Encoded: page.drawingBase64)
+    }
+
+    private static func normalizedBookmarks(_ pages: [Int]) -> [Int] {
+        Array(Set(pages.filter { $0 >= 0 })).sorted()
     }
 }
 

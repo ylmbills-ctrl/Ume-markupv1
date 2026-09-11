@@ -3,6 +3,56 @@ import PencilKit
 import SwiftUI
 import UIKit
 
+/// Apple Pencil vs finger. On a real iPad, only Pencil draws. The Simulator
+/// treats the pointer as Pencil so Mac verification can still mark a page.
+enum PencilInput {
+    static var drawingPolicy: PKCanvasViewDrawingPolicy {
+        #if targetEnvironment(simulator)
+        .anyInput
+        #else
+        .pencilOnly
+        #endif
+    }
+
+    static var markupTouchTypes: [NSNumber] {
+        #if targetEnvironment(simulator)
+        [
+            NSNumber(value: UITouch.TouchType.direct.rawValue),
+            NSNumber(value: UITouch.TouchType.indirect.rawValue),
+            NSNumber(value: UITouch.TouchType.pencil.rawValue),
+            NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
+        ]
+        #else
+        [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        #endif
+    }
+
+    static func accepts(_ touch: UITouch) -> Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        touch.type == .pencil
+        #endif
+    }
+
+    static func isPencilEvent(_ event: UIEvent?, at point: CGPoint, in view: UIView) -> Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        if event?.type == .hover { return true }
+        guard let touches = event?.allTouches, !touches.isEmpty else { return false }
+        let pencilTouches = touches.filter { $0.type == .pencil }
+        guard !pencilTouches.isEmpty else { return false }
+        return pencilTouches.contains { touch in
+            let location = touch.location(in: view)
+            let dx = location.x - point.x
+            let dy = location.y - point.y
+            return (dx * dx) + (dy * dy) < (48 * 48)
+        }
+        #endif
+    }
+}
+
 final class MarkupBridge {
     weak var coordinator: PDFMarkupView.Coordinator?
     weak var pdfView: PDFView?
@@ -17,6 +67,10 @@ final class MarkupBridge {
 
     func undo() {
         coordinator?.undo(in: pdfView)
+    }
+
+    func goToPage(_ pageIndex: Int) {
+        coordinator?.goToPage(pageIndex, pdfView: pdfView)
     }
 }
 
@@ -35,7 +89,9 @@ final class PageInkCanvas: PKCanvasView {
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        guard isUserInteractionEnabled else { return false }
+        guard isUserInteractionEnabled, bounds.contains(point) else { return false }
+        // Finger / palm must fall through to PDFKit so the page can scroll.
+        guard PencilInput.isPencilEvent(event, at: point, in: self) else { return false }
         return super.point(inside: point, with: event)
     }
 
@@ -47,13 +103,16 @@ final class PageInkCanvas: PKCanvasView {
     }
 }
 
-/// PDFView that forwards hits to per-page ink canvases and can freeze document
-/// scrolling while a markup tool owns Pencil / finger drags.
+/// PDFView that forwards Apple Pencil hits to per-page ink canvases. Finger
+/// and palm go to the document scroll view so the page still pans.
 final class MarkupPDFView: PDFView {
     var inkHitTestingEnabled = false
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        if inkHitTestingEnabled, let canvas = inkCanvas(containing: point), canvas.isUserInteractionEnabled {
+        if inkHitTestingEnabled,
+           PencilInput.isPencilEvent(event, at: point, in: self),
+           let canvas = inkCanvas(containing: point),
+           canvas.isUserInteractionEnabled {
             let local = convert(point, to: canvas)
             if let hit = canvas.hitTest(local, with: event) {
                 return hit
@@ -62,7 +121,26 @@ final class MarkupPDFView: PDFView {
                 return canvas
             }
         }
-        return super.hitTest(point, with: event)
+
+        let hit = super.hitTest(point, with: event)
+        // Finger landed on the ink overlay — give the document scroll view the touch.
+        if let hit, isInkOverlay(hit), let scroll = documentScrollView() {
+            let local = convert(point, to: scroll)
+            return scroll.hitTest(local, with: event) ?? scroll
+        }
+        return hit
+    }
+
+    private func isInkOverlay(_ view: UIView) -> Bool {
+        if view is PageInkCanvas { return true }
+        if view.subviews.contains(where: { $0 is PageInkCanvas }) { return true }
+        var current: UIView? = view
+        while let node = current {
+            if node is PageInkCanvas { return true }
+            current = node.superview
+            if current is PDFView || current is UIScrollView { break }
+        }
+        return false
     }
 
     private func inkCanvas(containing point: CGPoint) -> PageInkCanvas? {
@@ -149,6 +227,7 @@ struct PDFMarkupView: UIViewRepresentable {
         }
         context.coordinator.syncToolState(in: pdfView)
         context.coordinator.reconcilePDFAnnotations(in: pdfView)
+        context.coordinator.hydrateCanvasesIfNeeded(in: pdfView)
     }
 
     static func dismantleUIView(_ uiView: MarkupPDFView, coordinator: Coordinator) {
@@ -196,12 +275,17 @@ struct PDFMarkupView: UIViewRepresentable {
         }
 
         func installGestures(on pdfView: PDFView) {
-            let types = Self.markupTouchTypes
-
             let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
             pan.minimumNumberOfTouches = 1
             pan.maximumNumberOfTouches = 1
-            pan.allowedTouchTypes = types
+            // Underline stays a selection drag (finger or Pencil). Ink/highlight
+            // do not use this recognizer.
+            pan.allowedTouchTypes = [
+                NSNumber(value: UITouch.TouchType.direct.rawValue),
+                NSNumber(value: UITouch.TouchType.indirect.rawValue),
+                NSNumber(value: UITouch.TouchType.pencil.rawValue),
+                NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
+            ]
             pan.requiresExclusiveTouchType = false
             pan.delegate = self
             pan.cancelsTouchesInView = true
@@ -209,7 +293,6 @@ struct PDFMarkupView: UIViewRepresentable {
             panRecognizer = pan
 
             let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-            tap.allowedTouchTypes = types
             tap.requiresExclusiveTouchType = false
             tap.delegate = self
             pdfView.addGestureRecognizer(tap)
@@ -254,6 +337,21 @@ struct PDFMarkupView: UIViewRepresentable {
             }
         }
 
+        /// First SwiftUI frame can attach overlays before `markup.json` is read.
+        /// Fill empty canvases once the sidecar arrives, without clobbering live strokes.
+        func hydrateCanvasesIfNeeded(in pdfView: PDFView) {
+            for canvas in canvases.values {
+                guard canvas.drawing.strokes.isEmpty,
+                      let page = pageForCanvas[ObjectIdentifier(canvas)] else { continue }
+                let pageIndex = pdfView.document?.index(for: page) ?? 0
+                let hasInk = parent.markup.drawingData(for: pageIndex)?.isEmpty == false
+                let hasHighlight = parent.markup.highlightData(for: pageIndex)?.isEmpty == false
+                if hasInk || hasHighlight {
+                    applyStoredDrawing(to: canvas, pageIndex: pageIndex)
+                }
+            }
+        }
+
         func pdfView(_ pdfView: PDFView, overlayViewFor page: PDFPage) -> UIView? {
             let key = ObjectIdentifier(page)
             if let existing = canvases[key] {
@@ -275,12 +373,8 @@ struct PDFMarkupView: UIViewRepresentable {
             canvas.contentInsetAdjustmentBehavior = .never
             configure(canvas)
 
-            if let index = pdfView.document?.index(for: page),
-               let data = parent.markup.drawingData(for: index),
-               let drawing = try? PKDrawing(data: data) {
-                isApplyingInk = true
-                canvas.drawing = drawing
-                isApplyingInk = false
+            if let index = pdfView.document?.index(for: page) {
+                applyStoredDrawing(to: canvas, pageIndex: index)
             }
 
             canvases[key] = canvas
@@ -341,8 +435,18 @@ struct PDFMarkupView: UIViewRepresentable {
             persistAllInk(document: pdfView?.document)
         }
 
+        func goToPage(_ pageIndex: Int, pdfView: PDFView?) {
+            guard let pdfView,
+                  let document = pdfView.document,
+                  pageIndex >= 0,
+                  pageIndex < document.pageCount,
+                  let page = document.page(at: pageIndex) else { return }
+            pdfView.go(to: page)
+            updatePageIndex(pdfView)
+        }
+
         func undo(in pdfView: PDFView?) {
-            if parent.tool == .ink || parent.tool == .eraser,
+            if parent.tool.enablesInkCanvas,
                let page = pdfView?.currentPage,
                let canvas = canvases[ObjectIdentifier(page)],
                canvas.undoManager?.canUndo == true {
@@ -421,31 +525,50 @@ struct PDFMarkupView: UIViewRepresentable {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            false
+            gestureRecognizer == tapRecognizer
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            switch touch.type {
-            case .direct, .indirect, .pencil, .indirectPointer:
-                return true
-            @unknown default:
-                return true
+            if gestureRecognizer == tapRecognizer, parent.tool == .eraser {
+                return PencilInput.accepts(touch)
             }
+            return true
         }
 
         private func configure(_ canvas: PageInkCanvas) {
             let inkColor = UIColor(parent.color)
-            canvas.drawingPolicy = .anyInput
+            canvas.drawingPolicy = PencilInput.drawingPolicy
             canvas.isUserInteractionEnabled = parent.tool.enablesInkCanvas
             canvas.activateOverlayAncestors()
             switch parent.tool {
             case .ink:
                 canvas.tool = PKInkingTool(.pen, color: inkColor, width: 4)
+            case .highlight:
+                canvas.tool = PKInkingTool(
+                    .marker,
+                    color: inkColor.withAlphaComponent(0.55),
+                    width: 16
+                )
             case .eraser:
                 canvas.tool = PKEraserTool(.vector)
             default:
                 break
             }
+        }
+
+        private func applyStoredDrawing(to canvas: PKCanvasView, pageIndex: Int) {
+            var combined = PKDrawing()
+            if let data = parent.markup.drawingData(for: pageIndex),
+               let ink = try? PKDrawing(data: data) {
+                combined = combined.appending(ink)
+            }
+            if let data = parent.markup.highlightData(for: pageIndex),
+               let highlight = try? PKDrawing(data: data) {
+                combined = combined.appending(highlight)
+            }
+            isApplyingInk = true
+            canvas.drawing = combined
+            isApplyingInk = false
         }
 
         private func enablePageViewInteraction(in pdfView: PDFView) {
@@ -477,7 +600,8 @@ struct PDFMarkupView: UIViewRepresentable {
             let startPage = pdfView.convert(start, to: page)
             let endPage = pdfView.convert(end, to: page)
             let pageIndex = pdfView.document?.index(for: page) ?? 0
-            let kind: MarkupKind = parent.tool == .underline ? .underline : .highlight
+            guard parent.tool == .underline else { return }
+            let kind: MarkupKind = .underline
 
             var rects: [CodableRect] = []
             if let selection = page.selection(from: startPage, to: endPage) {
@@ -515,7 +639,18 @@ struct PDFMarkupView: UIViewRepresentable {
 
         private func persistInk(_ canvas: PKCanvasView, page: PDFPage, document: PDFDocument?) {
             let pageIndex = document?.index(for: page) ?? max(parent.currentPage - 1, 0)
-            parent.markup.upsertInk(pageIndex: pageIndex, drawingData: canvas.drawing.dataRepresentation())
+            var inkDrawing = PKDrawing()
+            var highlightDrawing = PKDrawing()
+            inkDrawing.strokes = canvas.drawing.strokes.filter { $0.ink.inkType != .marker }
+            highlightDrawing.strokes = canvas.drawing.strokes.filter { $0.ink.inkType == .marker }
+            parent.markup.upsertInk(
+                pageIndex: pageIndex,
+                drawingData: inkDrawing.strokes.isEmpty ? Data() : inkDrawing.dataRepresentation()
+            )
+            parent.markup.upsertHighlight(
+                pageIndex: pageIndex,
+                drawingData: highlightDrawing.strokes.isEmpty ? Data() : highlightDrawing.dataRepresentation()
+            )
         }
 
         private func persistAllInk(document: PDFDocument?) {
@@ -584,12 +719,5 @@ struct PDFMarkupView: UIViewRepresentable {
             }
             return nil
         }
-
-        private static let markupTouchTypes: [NSNumber] = [
-            NSNumber(value: UITouch.TouchType.direct.rawValue),
-            NSNumber(value: UITouch.TouchType.indirect.rawValue),
-            NSNumber(value: UITouch.TouchType.pencil.rawValue),
-            NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
-        ]
     }
 }

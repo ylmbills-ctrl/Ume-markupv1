@@ -21,6 +21,14 @@ enum MarkupTool: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Compact toolbar caption. Drawing tools remind that Apple Pencil marks.
+    var toolbarCaption: String {
+        if usesPencilOnlyDrawing {
+            return "\(title) · Pencil"
+        }
+        return title
+    }
+
     var systemImage: String {
         switch self {
         case .hand: return "hand.draw"
@@ -33,7 +41,7 @@ enum MarkupTool: String, CaseIterable, Identifiable {
     }
 
     var capturesPageDrag: Bool {
-        self == .highlight || self == .underline
+        self == .underline
     }
 
     var capturesPageTap: Bool {
@@ -41,17 +49,18 @@ enum MarkupTool: String, CaseIterable, Identifiable {
     }
 
     var enablesInkCanvas: Bool {
-        self == .ink || self == .eraser
+        self == .ink || self == .highlight || self == .eraser
     }
 
-    /// PDFKit must not scroll while a one-finger / Pencil drag means "mark," not "pan."
+    /// Ink, freehand highlight, and stroke erase accept Apple Pencil only.
+    var usesPencilOnlyDrawing: Bool {
+        self == .ink || self == .highlight || self == .eraser
+    }
+
+    /// Only the selection-based underline drag still owns one-finger panning.
+    /// Ink / highlight / eraser leave the document scroll view on so a finger can pan.
     var blocksDocumentScroll: Bool {
-        switch self {
-        case .hand, .note:
-            return false
-        case .highlight, .underline, .ink, .eraser:
-            return true
-        }
+        self == .underline
     }
 }
 
