@@ -29,10 +29,13 @@ enum WelcomePDFFactory {
             let body = """
             Import your own PDFs from Files or the share sheet, then mark them up while you review work or study.
 
+            Select a tool in the bottom toolbar first. Scroll does not mark the page.
+
             Tools in this version
-            • Highlight — drag over text (or any region) to mark a passage.
+            • Scroll — pan and pinch the PDF. Apple Pencil will not write in this mode.
+            • Highlight — drag Pencil or finger over text (or any region) to mark a passage.
             • Underline — same gesture, with an underline instead of a wash.
-            • Ink — draw with Apple Pencil or a finger. Pinch to zoom while Scroll is selected.
+            • Ink — draw with Apple Pencil or a finger. Switch back to Scroll to pan.
             • Note — tap a spot on the page, type a short comment, and save.
             • Eraser — tap a highlight, underline, or note to remove it, or rub out ink.
 

@@ -43,6 +43,16 @@ enum MarkupTool: String, CaseIterable, Identifiable {
     var enablesInkCanvas: Bool {
         self == .ink || self == .eraser
     }
+
+    /// PDFKit must not scroll while a one-finger / Pencil drag means "mark," not "pan."
+    var blocksDocumentScroll: Bool {
+        switch self {
+        case .hand, .note:
+            return false
+        case .highlight, .underline, .ink, .eraser:
+            return true
+        }
+    }
 }
 
 enum MarkupPalette {
