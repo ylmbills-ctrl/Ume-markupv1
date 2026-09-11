@@ -58,7 +58,7 @@ This environment cannot compile or launch an iOS app. On a Mac, walk through:
 
 1. Run on an iPad simulator (large canvas / split view) and an iPhone simulator.
 2. Add Sample PDF. Confirm name + last opened appear in the library. Search for `Sample`.
-3. Open it. Scroll pages (one page in the sample). Select **Highlight** and drag across a paragraph. Select **Underline** and drag again. Select **Ink** and draw with the mouse or Pencil. Select **Note**, tap the page, type a comment, Save.
+3. Open it. The toolbar defaults to **Scroll** — pan the page (Pencil will not mark). Select **Highlight** and drag across a paragraph with mouse, finger, or Pencil. Select **Underline** and drag again. Select **Ink** and draw; switch back to **Scroll** to pan. Select **Note**, tap the page, type a comment, Save. Select **Eraser** and tap a mark or rub out ink.
 4. Press Home or go back to the library. Reopen the document. Highlights, underline, ink, and the note should still be there.
 5. Import a real PDF via **Import PDF…** (Files / document picker).
 6. On a device, share a PDF into **UME Markupv1** (the app registers as a PDF editor). It is copied into the library.
@@ -114,14 +114,18 @@ If iCloud later becomes available, any existing local library folder is copied i
 
 ### Markup tools
 
-| Tool | Input | Stored as |
+**You must select a tool in the bottom toolbar.** The toolbar also shows the active tool name (Scroll, Highlight, Ink, …). Apple Pencil and finger follow that tool; they do not auto-switch.
+
+| Tool | What to do | Stored as |
 | --- | --- | --- |
-| Scroll | Drag / pinch | — |
-| Highlight | Drag (text selection when the page has text, otherwise a rectangle) | `PDFAnnotation` `.highlight` |
-| Underline | Same gesture | `PDFAnnotation` `.underline` |
-| Ink | Apple Pencil or finger (`PKCanvasView.drawingPolicy = .anyInput`) | `PKDrawing` sidecar |
-| Note | Tap a page, type in a sheet | `PDFAnnotation` `.text` |
-| Eraser | Tap a highlight / underline / note, or rub out ink | removes that record / stroke |
+| **Scroll** | Pan / pinch the PDF. Pencil will **not** write. Use this to move around. | — |
+| **Highlight** | Drag Pencil or a finger over text (or any region). The page will not scroll while this tool is on. | `PDFAnnotation` `.highlight` |
+| **Underline** | Same drag as Highlight. | `PDFAnnotation` `.underline` |
+| **Ink** | Write or draw with Apple Pencil or a finger. Switch back to Scroll to pan. | `PKDrawing` sidecar |
+| **Note** | Tap a page, type in a sheet, Save. | `PDFAnnotation` `.text` |
+| **Eraser** | Tap a highlight / underline / note, or rub out ink strokes. | removes that record / stroke |
+
+Leave the document and reopen it: highlights, underlines, notes, and ink persist in `markup.json` (no paid iCloud required; local Application Support is used when iCloud is off).
 
 ## Project layout
 
@@ -154,6 +158,7 @@ Known thin-v1 behavior:
 
 - Ink lives in a sidecar, not inside the PDF, so Preview / other apps will not show those strokes. Highlights, underlines, and notes are also sidecar-backed (recreated on open) rather than baked into `document.pdf`.
 - Highlight on a scanned image PDF becomes a rectangle you dragged, not a text selection.
+- Scroll and markup are exclusive: Highlight / Underline / Ink / Eraser freeze page panning so Apple Pencil cannot be stolen as a scroll. Switch back to **Scroll** to move. Pinch-to-zoom stays available from Scroll.
 - Simulator cannot prove Pencil pressure or true iCloud multi-device sync.
 
 ## Requirements

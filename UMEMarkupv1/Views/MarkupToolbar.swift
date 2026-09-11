@@ -27,6 +27,13 @@ struct MarkupToolbar: View {
                 }
             }
 
+            Text(tool.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .layoutPriority(1)
+                .accessibilityHidden(true)
+
             Divider()
                 .frame(height: 22)
 
