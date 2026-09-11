@@ -116,7 +116,7 @@ enum WelcomePDFFactory {
     }
 
     private static func drawFooter(in page: CGRect) {
-        let footer = "UME Markupv1  ·  local-first  ·  iCloud Documents"
+        let footer = "UME Markupv1  ·  local-first  ·  this device"
         footer.draw(
             at: CGPoint(x: page.minX, y: page.maxY - 18),
             withAttributes: [

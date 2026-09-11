@@ -119,7 +119,7 @@ struct LibraryView: View {
         } description: {
             Text(
                 library.searchText.isEmpty
-                    ? "Import a PDF from Files, share one into this app, or add the sample page. \(library.usesICloud ? "iCloud sync is on." : "Documents stay on this device until iCloud is enabled.")"
+                    ? "Import a PDF from Files, share one into this app, or add the sample page. \(library.usesICloud ? "iCloud sync is on." : "Documents stay on this device.")"
                     : "Try a different filename."
             )
         } actions: {

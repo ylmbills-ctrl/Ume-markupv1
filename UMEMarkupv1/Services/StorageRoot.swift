@@ -4,12 +4,14 @@ enum StorageRoot {
     static let iCloudContainerID = "iCloud.com.ume.markupv1"
     static let libraryFolderName = "Library"
 
-    /// Resolves the document library folder. Prefers the iCloud ubiquity
-    /// container so PDFs and markup sidecars sync with the same Apple ID.
-    /// Falls back to Application Support when iCloud is unavailable
-    /// (simulator without iCloud, capability not yet enabled, signed out).
+    /// Resolves the document library folder. v1 defaults to Application Support
+    /// so a Personal Team build needs no iCloud entitlement. If a paid team later
+    /// adds the iCloud Documents capability and the OS vends a ubiquity container,
+    /// that folder is used instead.
     static func resolve() -> (root: URL, usesICloud: Bool) {
         let fileManager = FileManager.default
+        let local = localLibraryURL()
+        try? fileManager.createDirectory(at: local, withIntermediateDirectories: true)
 
         if let ubiquity = fileManager.url(forUbiquityContainerIdentifier: iCloudContainerID) {
             let documents = ubiquity.appendingPathComponent("Documents", isDirectory: true)
@@ -19,8 +21,6 @@ enum StorageRoot {
             return (library, true)
         }
 
-        let local = localLibraryURL()
-        try? fileManager.createDirectory(at: local, withIntermediateDirectories: true)
         return (local, false)
     }
 
