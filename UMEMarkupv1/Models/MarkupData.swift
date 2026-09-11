@@ -136,11 +136,11 @@ struct MarkupDocument: Codable, Hashable {
     }
 
     mutating func upsertInk(pageIndex: Int, drawingData: Data) {
-        upsert(pageIndex: pageIndex, drawingData: drawingData, into: &inkPages)
+        inkPages = Self.replacingPage(in: inkPages, pageIndex: pageIndex, drawingData: drawingData)
     }
 
     mutating func upsertHighlight(pageIndex: Int, drawingData: Data) {
-        upsert(pageIndex: pageIndex, drawingData: drawingData, into: &highlightPages)
+        highlightPages = Self.replacingPage(in: highlightPages, pageIndex: pageIndex, drawingData: drawingData)
     }
 
     func drawingData(for pageIndex: Int) -> Data? {
@@ -165,11 +165,14 @@ struct MarkupDocument: Codable, Hashable {
         bookmarkedPages = Self.normalizedBookmarks(bookmarkedPages)
     }
 
-    private mutating func upsert(pageIndex: Int, drawingData: Data, into pages: inout [InkPage]) {
-        pages.removeAll { $0.pageIndex == pageIndex }
+    /// Copy-in / copy-out so we never pass `&self.inkPages` into a mutating method
+    /// (that overlapping exclusive access fails to compile).
+    private static func replacingPage(in pages: [InkPage], pageIndex: Int, drawingData: Data) -> [InkPage] {
+        var next = pages.filter { $0.pageIndex != pageIndex }
         if !drawingData.isEmpty {
-            pages.append(InkPage(pageIndex: pageIndex, drawingBase64: drawingData.base64EncodedString()))
+            next.append(InkPage(pageIndex: pageIndex, drawingBase64: drawingData.base64EncodedString()))
         }
+        return next
     }
 
     private func data(in pages: [InkPage], pageIndex: Int) -> Data? {
