@@ -40,11 +40,10 @@ final class PageInkCanvas: PKCanvasView {
     }
 
     func activateOverlayAncestors() {
-        var node = superview
-        while let current = node, !(current is PDFView) {
-            current.isUserInteractionEnabled = true
-            node = current.superview
-        }
+        // PDFKit wraps the overlay in a container that defaults to ignoring
+        // hits. Toggle only that host — never the document scroll view.
+        guard let host = superview, !(host is PDFView), !(host is UIScrollView) else { return }
+        host.isUserInteractionEnabled = isUserInteractionEnabled
     }
 }
 
@@ -297,7 +296,7 @@ struct PDFMarkupView: UIViewRepresentable {
             return canvas
         }
 
-        func pdfView(_ view: PDFView, willDisplayOverlayView overlayView: UIView, for page: PDFPage) {
+        func pdfView(_ view: PDFView, willDisplayOverlayView overlayView: UIView, for _: PDFPage) {
             (overlayView as? PageInkCanvas)?.activateOverlayAncestors()
             if let canvas = overlayView as? PageInkCanvas {
                 configure(canvas)
